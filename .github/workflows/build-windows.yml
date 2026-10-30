@@ -1,1 +1,49 @@
+name: Build Windows
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          architecture: x64
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Run matcher tests
+        run: python test_core.py
+
+      - name: Fetch English offline model
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip -OutFile en.zip
+          Expand-Archive en.zip -DestinationPath tmpmodel
+          New-Item -ItemType Directory -Force models | Out-Null
+          Move-Item tmpmodel/vosk-model-small-en-us-0.15 models/en
+
+      - name: Build exe
+        run: pyinstaller --noconfirm --onedir --windowed --name TermPrompter --collect-all vosk --collect-all sounddevice --collect-all _sounddevice_data termprompter.py
+
+      - name: Add English model and package
+        shell: pwsh
+        run: |
+          Copy-Item -Recurse models dist/TermPrompter/models
+          Compress-Archive -Path dist/TermPrompter -DestinationPath TermPrompter-Windows-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TermPrompter-Windows-x64
+          path: TermPrompter-Windows-x64.zip
+          if-no-files-found: error
 
